@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual Environment
+.venv/
+venv/
+
+# IDE
+.idea/
+
+# Logs
+*.log
+
+# Test cache
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
