@@ -10,7 +10,7 @@ pip install -r requirements.txt
 ```
 # Запуск сервера
 ```bash
-uvicorn main:app --reload
+uvicorn gateway.app:app
 ```
 Сервер будет доступен по адресу:  
 **http://127.0.0.1:8000**
@@ -30,9 +30,12 @@ uvicorn main:app --reload
 
 ### Build the image
 ```bash
-docker build -t my-api .
+      `docker build -t my-api`
+```
+      
+      
 
-Run the container
+ Run the container
 
 docker run --rm -p 8000:8000 my-api
 Check the API
@@ -72,3 +75,15 @@ enrollments — записи на курсы (id, user_id, course_id, enrolled_a
 Подтверждение создания и заполнения таблиц
 Полное содержимое всех трёх таблиц через SELECT * FROM ...
 (все строки, без ограничений)
+
+## Архитектурное развитие
+
+Этот проект является MVP
+для более масштабной системы **TaskFlow** — микросервисного API управления задачами.
+
+Полное техническое задание, диаграммы и
+архитектурные решения находятся в папке `docs/`.
+[Техническое задание](docs/technical-spec.md)  
+- [Диаграммы](docs/diagrams/)  
+- [ADR (архитектурные решения)](docs/adr/)
+from shared.models import TodoRead
