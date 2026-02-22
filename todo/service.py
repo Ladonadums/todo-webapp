@@ -1,57 +1,89 @@
+"""
+Бизнес-логика для работы с задачами (Todo).
+Заменяет in-memory хранилище на PostgreSQL через SQLAlchemy.
+Использует зависимость db: Session (Dependency Injection).
+"""
+
 from typing import List, Optional
-from datetime import datetime
-from shared.models import TodoCreate, TodoUpdate, TodoRead
+from sqlalchemy.orm import Session
+from shared.models import Todo  # ORM модель из shared/models.py
 
 
+def get_all_todos(
+    db: Session,
+    is_done: Optional[bool] = None,
+    min_priority: Optional[int] = None
+) -> List[Todo]:
+    """
+    Получить список задач с фильтрацией.
+    :param db: SQLAlchemy session (передаётся через Depends)
+    :param is_done: фильтр по статусу выполнения
+    :param min_priority: минимальный приоритет (1–5)
+    :return: список объектов Todo
+    """
+    query = db.query(Todo)
 
-
-# Хранилище (временно — потом будет PostgreSQL)
-todos = [
-    {
-        "id": 0,
-        "title": "Список срочных дел",
-        "description": "Если запустить сервер то это...uvicorn",
-        "priority": 3,
-        "category": "Программисты",
-        "is_adult": False,
-        "is_done": False,
-        "created_at": datetime.now()
-    }
-]
-
-def get_all_todos(is_done: Optional[bool] = None, min_priority: Optional[int] = None) -> List[dict]:
-    result = todos
     if is_done is not None:
-        result = [t for t in result if t["is_done"] == is_done]
+        query = query.filter(Todo.is_done == is_done)
     if min_priority is not None:
-        result = [t for t in result if t["priority"] >= min_priority]
-    return result
+        query = query.filter(Todo.priority >= min_priority)
 
-def create_todo(todo_data: dict) -> dict:
-    new_id = max((t["id"] for t in todos), default=-1) + 1
-    todo_dict = todo_data.copy()
-    todo_dict["id"] = new_id
-    todo_dict["is_done"] = False
-    todo_dict["created_at"] = datetime.now()
-    todos.append(todo_dict)
-    return todo_dict
+    return query.all()
 
-def get_todo_by_id(todo_id: int) -> dict:
-    for todo in todos:
-        if todo["id"] == todo_id:
-            return todo
-    raise KeyError("Дело не найдено")
 
-def update_todo_by_id(todo_id: int, updates: dict) -> dict:
-    for todo in todos:
-        if todo["id"] == todo_id:
-            todo.update(updates)
-            return todo
-    raise KeyError("Дело не найдено")
+def create_todo(db: Session, todo_data: dict) -> Todo:
+    """
+    Создать новую задачу в БД.
+    :param db: сессия
+    :param todo_data: словарь с данными (title, description, ...)
+    :return: созданный объект Todo (с id, created_at и т.д.)
+    """
+    new_todo = Todo(**todo_data)
+    db.add(new_todo)
+    db.commit()
+    db.refresh(new_todo)  # чтобы получить автоинкрементный id и timestamps из БД
+    return new_todo
 
-def delete_todo_by_id(todo_id: int) -> dict:
-    for i, todo in enumerate(todos):
-        if todo["id"] == todo_id:
-            todos.pop(i)
-            return {"status": "deleted", "id": todo_id}
-    raise KeyError("Дело не найдено")
+
+def get_todo_by_id(db: Session, todo_id: int) -> Todo:
+    """
+    Найти задачу по ID.
+    :param db: сессия
+    :param todo_id: идентификатор
+    :return: объект Todo
+    :raises KeyError: если не найдено
+    """
+    todo = db.query(Todo).filter(Todo.id == todo_id).first()
+    if not todo:
+        raise KeyError("Дело не найдено")
+    return todo
+
+
+def update_todo_by_id(db: Session, todo_id: int, updates: dict) -> Todo:
+    """
+    Обновить задачу по ID.
+    :param db: сессия
+    :param todo_id: ID задачи
+    :param updates: словарь полей для обновления (например: {"is_done": True})
+    :return: обновлённый объект Todo
+    """
+    todo = get_todo_by_id(db, todo_id)
+    for key, value in updates.items():
+        if hasattr(todo, key):
+            setattr(todo, key, value)
+    db.commit()
+    db.refresh(todo)
+    return todo
+
+
+def delete_todo_by_id(db: Session, todo_id: int) -> dict:
+    """
+    Удалить задачу по ID.
+    :param db: сессия
+    :param todo_id: ID задачи
+    :return: {"status": "deleted", "id": int}
+    """
+    todo = get_todo_by_id(db, todo_id)
+    db.delete(todo)
+    db.commit()
+    return {"status": "deleted", "id": todo_id}

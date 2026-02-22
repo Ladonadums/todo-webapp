@@ -1,26 +1,21 @@
 # Python
 __pycache__/
 *.pyc
-
-# Virtual Environment
-.venv/
 venv/
+.env
+.env.local
+
+# Базы данных
+*.db
+*.sqlite
 
 # IDE
 .idea/
+.vscode/
 
-# Logs
+# Docker
+.dockerignore
+
+# Логи
 *.log
-
-# Test cache
-.pytest_cache/
-
-# OS
-.DS_Store
-Thumbs.db
-
-shcul.db
-
-#личное окружение
-.env
 

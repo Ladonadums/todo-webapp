@@ -1,0 +1,163 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: todos
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  opensearch:
+    image: opensearchproject/opensearch:2.12.0
+    environment:
+      discovery.type: single-node
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: admin
+      DISABLE_SECURITY_PLUGIN: "true"
+    ports:
+      - "9200:9200"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  gateway:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: "postgresql+psycopg2://postgres:postgres@postgres:5432/todos"
+      REDIS_URL: "redis://redis:6379/0"
+      OPENSEARCH_HOST: "opensearch"
+      OPENSEARCH_PORT: "9200"
+      JWT_SECRET: "supersecret"
+    depends_on:
+      - postgres
+      - redis
+      - opensearch
+
+volumes:
+  postgres_data:
+  redis_data:
+
+
+
+
+
+
+
+#============================================
+# Docker Compose для проекта TaskFlow(MVP)
+# Версия 3.8 совместима с Docker Engine >19.03
+# Структура проекта:
+# |todo-Webapp/
+# |    |---gateway/         точка входа(FastAPI)
+# |         ----app.pu      содержит app=FastAPI
+# |         ----Dockerfile  сборка образа для gateway
+# |    |---shared/
+# |    |---todo/
+# |    |---docs/
+# |         ----adr/
+# |         ----diagrams/
+# |         ---technical-spec
+
+#=============================================
+#PostgreSQL используется как Хранилище(пользователи и задачи) в
+#services.auth.models.User и services.todo.model.Todo
+# переменные окружения берутся из: .env (local)/docker-compose.yml(явно указаны)
+# классы которые используют подключение:
+# shared.session.SessionLocal(SQLAlchemy engine)
+# services.auth.config.Settings.DATABASE.URL
+# библиотека: SQLAlchemy + psycopg2-binary
+# один модуль: shared/session.py -->create_engine(settings.DATABASE_URL
+# функциональная связь: gateway → postgres (через SQLAlchemy ORM)
+#=====================================================================================
+
+
+#=================================================================
+# 2. Redis — in-memory data store & message broker
+# Используется в:
+#   - worker.celery_app (broker для Cele #   - worker.celery_app (broker для Celery)ry)
+#   - gateway (опционально — кэш, но в MVP не используется)
+# Переменная: REDIS_URL = "redis://redis:6379/0"
+# Классы:
+#   - worker.celery_app.Celery(broker=REDIS_URL)
+# Библиотека: celery[redis] + redis-py
+# Модуль: worker/celery_app.py
+# Функциональная связь:
+#   - Domain Service → publishes event → Redis (via Celery)
+#   - Worker → consumes from Redis → индексирует в OpenSearch
+#======================================================================
+
+#========================================================================
+# OpenSearch — движок полнотекстового поиска (форк Elasticsearch)
+# Используется в:
+#   - search.client.OpenSearchClient
+#   - worker.tasks.index_todo (индексация задач)
+# Переменные:
+#   OPENSEARCH_HOST = "opensearch"   ← имя сервиса в Docker-сети
+#   OPENSEARCH_PORT = "9200"
+# Классы:
+#   - search/client.py → class OpenSearchClient
+#   - shared/search_utils.py (если есть)
+# Библиотека: opensearch-py (аналог elasticsearch-py)
+# Модуль: search/client.py → OpenSearch(hosts=[f"{host}:{port}"])
+# Функциональная связь:
+#   Worker → отправляет документ в индекс `todos` → OpenSearch
+#   Gateway → /search → вызывает search.service.search(query)
+#========================================================================
+
+#=============================================================================
+# 4. Gateway — API Gateway (точка входа)
+# Источник: gateway/app.py
+# Сборка: из папки ./gateway (context), используя Dockerfile внутри неё
+# Классы, которые запускаются:
+#   - app = FastAPI() в gateway/app.py
+#   - Зависимости:
+#       * services.auth.config.Settings --> читает env-переменные
+#       * shared.session.get_db() --> создаёт сессию к postgres
+#   from gateway.middleware import AuthMiddleware
+# Функциональная связь с другими сервисами:
+#   - Внутри контейнера: gateway видит другие сервисы по имени:
+#        postgres --> разрешается в IP через Docker DNS
+#        redis --> redis:6379
+#        opensearch --> opensearch:9200
+#   - Запрос: GET /todos --> gateway --> вызывает domain.service.get_todos() -->
+#        который использует SessionLocal → подключается к postgres
+#   - Запрос: POST /todos --> domain.service.create_todo() -->
+#        публикует событие в Redis (через Celery) --> worker обрабатывает
+#==================================================================================
+
+   # environment:
+      # --- Переменные, читаемые Pydantic Settings ---
+      #DATABASE_URL: "postgresql+psycopg2://postgres:postgres@postgres:5432/todos"
+      #    используется в: shared/session.py → create_engine(...)
+      #REDIS_URL: "redis://redis:6379/0"
+      #    используется в: worker/celery_app.py → Celery(broker=REDIS_URL)
+     # OPENSEARCH_HOST: "opensearch"
+      #   services.auth.config.Settings (наследуется от pydantic.BaseSettings)
+      #OPENSEARCH_PORT: "9200"
+      #    используется в: search/client.py → OpenSearch(hosts=[f"{host}:{port}"])
+
+      #JWT_SECRET: "supersecret-long-random-string-32-bytes-min"
+      #    используется в: services/auth/config.py → Settings.JWT_SECRET
+
+      #JWT_EXPIRE_MIN: "15"
+      #    используется в: services/auth/utils.py → timedelta(minutes=int(...))
+      # Примечание: все эти переменные должны быть объявлены в:
+      #   services.auth.config.Settings (наследуется от pydantic.BaseSettings)
+

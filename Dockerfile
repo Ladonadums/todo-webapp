@@ -12,8 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Копируем весь код проекта
 COPY gateway/ ./gateway/
-COPY shared/ ./shared/
-COPY todo/ ./todo/
+COPY shared ./shared/
+COPY todo ./todo/
 
 # Открываем порт 8000
 EXPOSE 8000
