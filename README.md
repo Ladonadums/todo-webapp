@@ -87,3 +87,28 @@ enrollments — записи на курсы (id, user_id, course_id, enrolled_a
 - [Диаграммы](docs/diagrams/)  
 - [ADR (архитектурные решения)](docs/adr/)
 from shared.models import TodoRead
+
+
+# TaskFlow API Gateway
+
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.128.0-blue)](https://fastapi.tiangolo.com/)
+[![Python](https://img.shields.io/badge/Python-3.13-blue)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/Docker-24.0-green)](https://www.docker.com/)
+
+Единый шлюз для управления задачами и пользователями.  
+Архитектура: **Gateway + логические сервисы + инфраструктура**.
+
+---
+
+##  Статус
+Рабочая система:
+- Регистрация пользователя (`POST /auth/register`)
+- Аутентификация через JWT (`POST /auth/login`)
+- Авторизованный доступ к `/todos`
+- Хранение данных в **PostgreSQL**
+- Поддержка миграций через **Alembic**
+- Интеграция с **Redis** и **OpenSearch** (готова к активации)
+
+---
+
+##  Архитектура

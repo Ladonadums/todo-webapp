@@ -1,15 +1,8 @@
-from fastapi import FastAPI, Request, HTTPException, Depends
+# gateway/app.py
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.responses import HTMLResponse
-from jose import jwt
-from typing import Optional
-from datetime import datetime
-import asyncio
-
-# === НОВЫЙ ИМПОРТ: для работы с БД ===
 from sqlalchemy.orm import Session
-from shared.session import get_db  #  зависимость для получения сессии
-
-# Импорты моделей и сервисов (без изменений)
+from shared.session import get_db
 from shared.models import TodoCreate, TodoUpdate, TodoRead
 from todo.service import (
     get_all_todos,
@@ -18,35 +11,17 @@ from todo.service import (
     update_todo_by_id,
     delete_todo_by_id
 )
-
-# === Настройки JWT (временно) ===
-SECRET_KEY = "supersecret"  #  позже заменить на os.getenv("JWT_SECRET")
-ALGORITHM = "HS256"
+from auth.router import router as auth_router
+import asyncio
 
 app = FastAPI(title="TaskFlow API Gateway")
 
-
-# === Middleware: проверка JWT (без изменений) ===
-@app.middleware("http")
-async def auth_middleware(request: Request, call_next):
-    if request.url.path.startswith(("/auth", "/docs", "/health", "/")):
-        return await call_next(request)
-
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid token")
-
-    token = auth_header.split(" ")[1]
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        request.state.user_id = payload.get("sub")
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    return await call_next(request)
+# === Подключаем роутеры СРАЗУ после создания app ===
+app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 
 
-# === Эндпоинты: корень и healthcheck (без изменений) ===
+# === Эндпоинты ===
+
 @app.get("/", response_class=HTMLResponse)
 def index():
     return """
@@ -59,74 +34,68 @@ def index():
     </html>
     """
 
+
 @app.get("/health")
 def health():
     return {"status": "OK"}
 
 
-# === КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: все эндпоинты получают db через Depends(get_db) ===
-
 @app.get("/todos", response_model=list[TodoRead])
 def get_todos(
-    is_done: Optional[bool] = None,
-    min_priority: Optional[int] = None,
-    db: Session = Depends(get_db),  #  ДОБАВЛЕНО: сессия из shared/session.py
-    request: Request = None
+    is_done: bool | None = None,
+    min_priority: int | None = None,
+    db: Session = Depends(get_db),
 ):
-    # Передаём db в service-функцию
-    return get_all_todos(db, is_done, min_priority)  #  ИЗМЕНЕНО: добавлен параметр db
+    return get_all_todos(db, is_done, min_priority)
 
 
-@app.post("/todos", response_model=TodoRead, status_code=201)
+@app.post("/todos", response_model=TodoRead, status_code=status.HTTP_201_CREATED)
 def create_todo_endpoint(
     todo: TodoCreate,
-    db: Session = Depends(get_db),  # ДОБАВЛЕНО
-    request: Request = None
+    db: Session = Depends(get_db),
 ):
-    todo_dict = todo.model_dump()
-    return create_todo(db, todo_dict)  #  ИЗМЕНЕНО: добавлен db
+    return create_todo(db, todo.model_dump())
 
 
 @app.get("/todos/{todo_id}", response_model=TodoRead)
 def get_todo(
     todo_id: int,
-    db: Session = Depends(get_db),  #  ДОБАВЛЕНО
-    request: Request = None
+    db: Session = Depends(get_db),
 ):
     try:
-        return get_todo_by_id(db, todo_id)  #  ИЗМЕНЕНО: добавлен db
+        return get_todo_by_id(db, todo_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail="Дело не найдено")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Todo not found")
 
 
 @app.patch("/todos/{todo_id}", response_model=TodoRead)
 def update_todo(
     todo_id: int,
     updates: TodoUpdate,
-    db: Session = Depends(get_db),  #  ДОБАВЛЕНО
-    request: Request = None
+    db: Session = Depends(get_db),
 ):
     try:
         update_data = updates.model_dump(exclude_unset=True)
-        return update_todo_by_id(db, todo_id, update_data)  #  ИЗМЕНЕНО: добавлен db
+        return update_todo_by_id(db, todo_id, update_data)
     except KeyError:
-        raise HTTPException(status_code=404, detail="Дело не найдено")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Todo not found")
 
 
 @app.delete("/todos/{todo_id}")
 def delete_todo(
     todo_id: int,
-    db: Session = Depends(get_db),  #  ДОБАВЛЕНО
-    request: Request = None
+    db: Session = Depends(get_db),
 ):
     try:
-        return delete_todo_by_id(db, todo_id)  #  ИЗМЕНЕНО: добавлен db
+        delete_todo_by_id(db, todo_id)
+        return {"message": "Todo deleted"}
     except KeyError:
-        raise HTTPException(status_code=404, detail="Дело не найдено")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Todo not found")
 
 
-# === Slow endpoint (без изменений — не работает с БД) ===
+# === Полезный slow endpoint (для тестирования задержек) ===
 @app.get("/slow")
 async def slow_endpoint(ms: int = 300):
     await asyncio.sleep(ms / 1000)
     return {"slept_ms": ms}
+

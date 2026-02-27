@@ -39,12 +39,19 @@ services:
     build: .
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: "postgresql+psycopg2://postgres:postgres@postgres:5432/todos"
-      REDIS_URL: "redis://redis:6379/0"
-      OPENSEARCH_HOST: "opensearch"
-      OPENSEARCH_PORT: "9200"
-      JWT_SECRET: "supersecret"
+    env_file:
+      - .env .
+    volumes:
+      - ./.env:/app/.env
+      - ./alembic:/app/alembic
+      - ./alembic/versions:/app/versions
+      - ./alembic.ini:/app/alembic.ini
+      - ./gateway:/app/gateway
+      - ./auth:/app/auth
+      - ./shared:/app/shared
+      - ./todo:/app/todo
+
+
     depends_on:
       - postgres
       - redis

@@ -45,7 +45,7 @@ print("Таблицы созданы.")
 cur.execute("DELETE FROM enrollments")
 cur.execute("DELETE FROM courses")
 cur.execute("DELETE FROM users")
-print("🧹 Данные очищены.")
+print(" Данные очищены.")
 
 # Вставка пользователей
 users_data = [
